@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open items from the handoff: decisions</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:820px;margin:40px auto;padding:0 16px;color:#14161a}a{color:#1f5fa8}table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe1da;padding:8px 10px;text-align:left;vertical-align:top}th{background:#eef0ea}code{background:#eef0ea;padding:1px 4px;border-radius:4px}.status{font-weight:600}</style>
+</head>
+<body>
+<p><a href="../index.html">Docs index</a></p>
+<h1>Open items from the handoff: decisions</h1>
+<p><span class="status">Status:</span> chosen during the first build (2026-11-13). All are adjustable; none was explicitly confirmed by the owner.</p>
+<p>The build handoff (<code>feature-planning-skill-handoff.md</code>) left several items open. This page records what was built for each, what else was considered, and why.</p>
+
+<table>
+<tr><th>Item</th><th>Choice</th><th>Options considered</th><th>Why, and the trade-off</th></tr>
+<tr>
+<td>Diagram format</td>
+<td>A small boxes-and-arrows format drawn by the dashboard itself. Two types: <code>graph</code> (the agent places each box on a grid by column and row) and <code>sequence</code> (actors and ordered messages).</td>
+<td>Mermaid (the handoff's suggested default); the simple format (its stated fallback).</td>
+<td>Mermaid would add roughly 3 MB to every plan file and is hard to style to match the design. The simple format is about 150 lines, matches the artboard exactly and works offline. Trade-off: no automatic layout, so the agent must pick sensible grid positions, and entity-relationship diagrams are plain boxes rather than tables with fields. Mermaid can be added later as a third source type without changing existing plans.</td>
+</tr>
+<tr>
+<td>Saving state from a static page</td>
+<td>Every change is kept in the browser (localStorage). "Save for agent" writes <code>plan.state.json</code> directly where the browser allows it (Chrome, Edge) and downloads it otherwise (Firefox, Safari).</td>
+<td>Direct save; download; a tiny local server.</td>
+<td>No server to start or stop, and nothing is lost on reload. Trade-off: after a reload the developer clicks Save once more to reconnect the file, and Firefox and Safari users move the downloaded file by hand.</td>
+</tr>
+<tr>
+<td>Third file name and scope</td>
+<td><code>plan.state.json</code> holding notes, decision picks and ticks.</td>
+<td><code>plan.comments.json</code> holding notes only.</td>
+<td>Everything the developer does lives in one file the agent never rewrites wholesale, so it cannot collide with agent edits to <code>plan.json</code>.</td>
+</tr>
+<tr>
+<td>Viewer framework</td>
+<td>Plain TypeScript. The page is rebuilt from the data after each click.</td>
+<td>Preact, Svelte.</td>
+<td>The dashboard is small and its state is one object, so a framework would add a dependency without removing much code.</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>One Zod schema (<code>src/schema.ts</code>) with the word budgets built in, bundled into the command-line tool.</td>
+<td>TypeScript types plus a generated JSON Schema file.</td>
+<td>One source of truth instead of two files to keep in step, and budgets and cross-links (every criterion traced to a step and a test) are checked in the same pass. Trade-off: there is no standalone JSON Schema file for other tools. Zod can generate one if it is ever needed.</td>
+</tr>
+<tr>
+<td>Notes UI</td>
+<td>Every item has a small note button showing its open-note count. It expands a panel under the item with open notes, resolved notes tucked away, and a box with two buttons: "Add for agent" and "Add note to self". An "open notes" button in the header lists every open note.</td>
+<td>Not designed in the artboard.</td>
+<td>Built in the artboard's style from the behaviour the handoff agreed.</td>
+</tr>
+<tr>
+<td>Sub-agent files</td>
+<td>Briefs are plain markdown files inside the skill (<code>agents/*.md</code>) that the main agent hands to whatever sub-agent it has.</td>
+<td>Claude Code custom agent definitions.</td>
+<td>Works the same whether the skill is installed as a plugin, copied by hand, or used by another agent.</td>
+</tr>
+<tr>
+<td>Repo layout</td>
+<td>Source at the repo root; the installable skill in <code>plugin/skills/feature-plan/</code> with its build output committed.</td>
+<td>Viewer source inside the skill folder (the handoff's sketch).</td>
+<td>People who install the skill get only what it needs to run, and need Node but no install or build.</td>
+</tr>
+<tr>
+<td>Other agents</td>
+<td>Not answered. Nothing in the files is Claude-specific except the optional <code>allowed-tools</code> line in <code>SKILL.md</code>.</td>
+<td></td>
+<td>Any agent that can read files and run Node should work; only Claude Code has been considered so far.</td>
+</tr>
+</table>
+
+<h2>Still to do</h2>
+<ul>
+<li>A test run on a real feature in a real repo, then tune the instructions and word budgets.</li>
+</ul>
+</body>
+</html>

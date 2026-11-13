@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "id": "magic-link-signin",
+  "title": "Magic-link sign-in",
+  "status": "draft",
+  "repo": { "path": "/path/to/your/app", "branch": "feat/magic-link-signin" },
+  "createdAt": "2026-11-13T09:00:00Z",
+  "updatedAt": "2026-11-13T09:00:00Z",
+  "goal": {
+    "statement": "Let returning users sign in from a one-time link sent to their email, so nobody needs a password to reach their account.",
+    "doneWhen": [
+      { "id": "a1", "text": "Entering a registered email sends a sign-in link" },
+      { "id": "a2", "text": "Opening the link signs the user in once and returns them to the page they came from" },
+      { "id": "a3", "text": "A used or expired link shows a clear error with a way to request a new one" },
+      { "id": "a4", "text": "Unknown emails get the same response as known ones" },
+      { "id": "a5", "text": "Requests are rate-limited per email and per IP", "dependsOn": ["d2"] },
+      { "id": "a6", "text": "Password sign-in keeps working unchanged" }
+    ],
+    "outOfScope": [
+      "Sign-up by magic link",
+      "Removing password sign-in",
+      "SMS codes and passkeys",
+      "Redesigning the login page"
+    ]
+  },
+  "approach": {
+    "keyChanges": [
+      {
+        "id": "k1",
+        "title": "One-time tokens, stored hashed",
+        "text": "A new magic_link_tokens table keeps a SHA-256 hash, an expiry and a used-at time, so a leaked table cannot be replayed."
+      },
+      {
+        "id": "k2",
+        "title": "Two new auth routes",
+        "text": "POST /auth/magic-link issues and emails a token; GET /auth/verify consumes it and creates the existing session cookie.",
+        "provenance": { "kind": "code", "path": "src/server/auth/session.ts" }
+      },
+      {
+        "id": "k3",
+        "title": "A second path on the login form",
+        "text": "An \"Email me a link\" action sits beside the password flow and leads to a check-your-inbox state.",
+        "provenance": { "kind": "code", "path": "src/app/login/LoginForm.tsx" }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "d1",
+        "question": "How long should a link stay valid?",
+        "options": [
+          { "id": "a", "label": "10 minutes" },
+          { "id": "b", "label": "15 minutes" },
+          { "id": "c", "label": "60 minutes" }
+        ],
+        "recommended": "b",
+        "reason": "15 minutes. It covers slow email delivery while keeping a forwarded link short-lived."
+      },
+      {
+        "id": "d2",
+        "question": "Where should rate limits be enforced?",
+        "options": [
+          { "id": "a", "label": "In memory, per instance" },
+          { "id": "b", "label": "Redis" },
+          { "id": "c", "label": "At the API gateway" }
+        ],
+        "recommended": "b",
+        "reason": "Redis. It is already used for sessions and holds across instances."
+      },
+      {
+        "id": "d3",
+        "question": "What if the link opens on a different device?",
+        "options": [
+          { "id": "a", "label": "Sign in on that device" },
+          { "id": "b", "label": "Require the original browser" },
+          { "id": "c", "label": "Ask for a confirm code" }
+        ],
+        "recommended": "a",
+        "reason": "Sign in on that device. Most people read email on their phone, and a short lifetime limits the exposure."
+      }
+    ]
+  },
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "dataFlow",
+      "label": "Request flow",
+      "caption": "The happy path: one request issues the link, one consumes it.",
+      "source": {
+        "type": "graph",
+        "nodes": [
+          { "id": "form", "label": "Login form", "sub": "asks for email", "col": 0, "row": 0 },
+          { "id": "issue", "label": "Issue route", "sub": "POST magic-link", "col": 1, "row": 0, "tone": "new" },
+          { "id": "email", "label": "Email", "sub": "link with token", "col": 2, "row": 0, "tone": "new" },
+          { "id": "verify", "label": "Verify route", "sub": "GET verify", "col": 3, "row": 0, "tone": "new" },
+          { "id": "session", "label": "Session", "sub": "cookie + redirect", "col": 4, "row": 0 }
+        ],
+        "edges": [
+          { "from": "form", "to": "issue" },
+          { "from": "issue", "to": "email" },
+          { "from": "email", "to": "verify" },
+          { "from": "verify", "to": "session" }
+        ]
+      }
+    },
+    {
+      "id": "v2",
+      "kind": "state",
+      "label": "Token lifecycle",
+      "caption": "Every token ends used or expired, never both.",
+      "dependsOn": ["d1"],
+      "source": {
+        "type": "graph",
+        "nodes": [
+          { "id": "issued", "label": "Issued", "sub": "hash stored", "col": 0, "row": 0, "tone": "new" },
+          { "id": "used", "label": "Used", "sub": "used_at is set", "col": 1, "row": 0, "tone": "new" },
+          { "id": "expired", "label": "Expired", "sub": "past expires_at", "col": 1, "row": 1, "tone": "new" },
+          { "id": "signedin", "label": "Signed in", "sub": "session created", "col": 2, "row": 0 },
+          { "id": "error", "label": "Error page", "sub": "offers a new link", "col": 2, "row": 1, "tone": "alt" }
+        ],
+        "edges": [
+          { "from": "issued", "to": "used", "label": "opened in time" },
+          { "from": "issued", "to": "expired", "label": "15 min pass" },
+          { "from": "used", "to": "signedin" },
+          { "from": "expired", "to": "error" }
+        ]
+      }
+    },
+    {
+      "id": "v3",
+      "kind": "sequence",
+      "label": "Verify call",
+      "caption": "What the verify route does when a link is opened.",
+      "source": {
+        "type": "sequence",
+        "actors": [
+          { "id": "browser", "label": "Browser" },
+          { "id": "route", "label": "Verify route", "tone": "new" },
+          { "id": "tokens", "label": "Token service", "tone": "new" },
+          { "id": "sessions", "label": "Session" }
+        ],
+        "messages": [
+          { "from": "browser", "to": "route", "label": "GET /auth/verify" },
+          { "from": "route", "to": "tokens", "label": "consume(token)" },
+          { "from": "tokens", "to": "route", "label": "user id", "dashed": true },
+          { "from": "route", "to": "sessions", "label": "createSession" },
+          { "from": "route", "to": "browser", "label": "cookie + redirect", "dashed": true }
+        ]
+      }
+    }
+  ],
+  "touchpoints": {
+    "files": [
+      { "id": "f1", "action": "create", "path": "src/server/auth/magicLink.service.ts", "note": "Issue, hash, verify and consume tokens" },
+      { "id": "f2", "action": "create", "path": "src/server/routes/auth/magicLink.ts", "note": "POST route that issues and emails a link" },
+      { "id": "f3", "action": "create", "path": "src/server/routes/auth/verify.ts", "note": "GET route that consumes the token" },
+      { "id": "f4", "action": "create", "path": "src/emails/MagicLinkEmail.tsx", "note": "Email template with the sign-in link" },
+      { "id": "f5", "action": "create", "path": "src/app/login/CheckInbox.tsx", "note": "Confirmation state after requesting a link" },
+      { "id": "f6", "action": "modify", "path": "src/app/login/LoginForm.tsx", "note": "Add the \"Email me a link\" action" },
+      { "id": "f7", "action": "modify", "path": "src/server/auth/session.ts", "note": "Export createSession for reuse" },
+      { "id": "f8", "action": "modify", "path": "src/server/middleware/rateLimit.ts", "note": "Add a keyed limiter preset", "dependsOn": ["d2"] },
+      { "id": "f9", "action": "delete", "path": "src/server/auth/legacyResetToken.ts", "note": "Replaced by the shared token service" }
+    ],
+    "config": [
+      { "id": "c1", "code": "MAGIC_LINK_TTL_MINUTES=15", "note": "Token lifetime", "dependsOn": ["d1"] },
+      { "id": "c2", "code": "MAGIC_LINK_BASE_URL", "note": "Origin used to build the emailed link" }
+    ],
+    "migrations": [
+      { "id": "g1", "code": "add_magic_link_tokens", "note": "token_hash, user_id, expires_at, used_at, with an index on token_hash" }
+    ],
+    "dependencies": [
+      {
+        "id": "p1",
+        "code": "No new packages",
+        "note": "Uses node:crypto and the existing email client",
+        "provenance": { "kind": "docs", "sources": [{ "url": "https://nodejs.org/api/crypto.html", "date": "2026-11-13", "version": "22" }] }
+      }
+    ]
+  },
+  "steps": [
+    { "id": "s1", "title": "Add the magic_link_tokens migration and run it locally", "verify": "table and token_hash index show up in the local database" },
+    { "id": "s2", "title": "Build the token service: issue, verify, consume", "verify": "unit tests pass, and reusing a token fails" },
+    { "id": "s3", "title": "Add POST /auth/magic-link behind the rate limiter", "verify": "returns 202 for both known and unknown emails", "criteria": ["a1", "a4", "a5"], "dependsOn": ["d2"] },
+    { "id": "s4", "title": "Create the MagicLinkEmail template", "verify": "preview renders and the link uses MAGIC_LINK_BASE_URL", "criteria": ["a1"] },
+    { "id": "s5", "title": "Add GET /auth/verify and reuse createSession", "verify": "a valid link sets the session cookie and redirects", "criteria": ["a2"], "dependsOn": ["d3"] },
+    { "id": "s6", "title": "Update LoginForm and add the CheckInbox state", "verify": "button shows the inbox state; password path is unchanged", "criteria": ["a6"] },
+    { "id": "s7", "title": "Build the expired or used link page with resend", "verify": "a second click on the same link shows the error page", "criteria": ["a3"] },
+    { "id": "s8", "title": "Write integration and e2e tests, remove the legacy helper", "verify": "CI is green and nothing imports legacyResetToken", "criteria": ["a6"] }
+  ],
+  "testing": {
+    "tests": [
+      { "id": "t1", "kind": "unit", "title": "magicLink.service", "covers": "Hashing, expiry, single use" },
+      { "id": "t2", "kind": "integration", "title": "POST /auth/magic-link", "covers": "Same response for known and unknown emails; 429 past the limit", "criteria": ["a1", "a4", "a5"] },
+      { "id": "t3", "kind": "integration", "title": "GET /auth/verify", "covers": "Cookie set, redirect, reuse rejected", "criteria": ["a2", "a3"] },
+      { "id": "t4", "kind": "e2e", "title": "Sign in by link", "covers": "Full flow against a local mail catcher, plus password sign-in", "criteria": ["a2", "a6"] }
+    ],
+    "edgeCases": [
+      { "id": "e1", "text": "The same link is clicked twice" },
+      { "id": "e2", "text": "The link is opened one second after expiry" },
+      { "id": "e3", "text": "The email is typed with different casing" },
+      { "id": "e4", "text": "Two links are requested and the older one is opened" },
+      { "id": "e5", "text": "A mail scanner fetches the link before the user does" }
+    ],
+    "manualChecks": [
+      { "id": "m1", "text": "Send a real link to Gmail and Outlook and sign in from each" },
+      { "id": "m2", "text": "Request on a laptop, open the link on a phone" },
+      { "id": "m3", "text": "Sign in with a password to confirm nothing regressed" }
+    ]
+  },
+  "risks": {
+    "risks": [
+      { "id": "r1", "level": "high", "title": "Email security scanners open links automatically and use up the token", "fallback": "Make the verify page show a \"Continue\" button, and only consume the token on that click.", "provenance": { "kind": "assumed" } },
+      { "id": "r2", "level": "medium", "title": "Slow email delivery means links expire before they arrive", "fallback": "Raise MAGIC_LINK_TTL_MINUTES without a deploy, and keep the resend action one click away." },
+      { "id": "r3", "level": "low", "title": "The per-IP limit blocks people who share an office network", "fallback": "Treat the per-email limit as primary and loosen the IP threshold." }
+    ],
+    "assumptions": [
+      { "id": "x1", "text": "Email addresses are unique and already verified", "provenance": { "kind": "assumed" } },
+      { "id": "x2", "text": "Redis is available in every environment", "provenance": { "kind": "assumed" }, "dependsOn": ["d2"] },
+      { "id": "x3", "text": "The existing session cookie logic can be reused as is", "provenance": { "kind": "code", "path": "src/server/auth/session.ts" } }
+    ],
+    "openQuestions": [
+      { "id": "q1", "text": "Should requesting a new link cancel the earlier ones?" },
+      { "id": "q2", "text": "Do magic-link sign-ins need their own audit log entry?" },
+      { "id": "q3", "text": "Who signs off the wording of the email?" }
+    ]
+  }
+}

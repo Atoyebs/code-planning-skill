@@ -1,0 +1,12 @@
+{
+  "name": "code-planning-skill",
+  "description": "Visual feature planning for coding agents",
+  "owner": { "name": "Inioluwa Atoyebi" },
+  "plugins": [
+    {
+      "name": "feature-plan",
+      "source": "./plugin",
+      "description": "Plan one feature in an existing codebase as a short, visual dashboard you can tick off, decide on and annotate."
+    }
+  ]
+}

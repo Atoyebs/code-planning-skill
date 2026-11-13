@@ -1,0 +1,8 @@
+{
+  "name": "feature-plan",
+  "description": "Plan one feature in an existing codebase as a short, visual dashboard you can tick off, decide on and annotate.",
+  "version": "0.1.0",
+  "author": { "name": "Inioluwa Atoyebi" },
+  "repository": "https://github.com/Atoyebs/code-planning-skill",
+  "keywords": ["planning", "feature", "dashboard"]
+}

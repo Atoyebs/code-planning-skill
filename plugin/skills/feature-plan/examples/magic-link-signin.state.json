@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "planId": "magic-link-signin",
+  "updatedAt": "2026-11-13T09:30:00Z",
+  "decisions": { "d1": "b" },
+  "checks": { "s1": true, "s2": true },
+  "notes": [
+    {
+      "id": "n-example1",
+      "anchor": "s5",
+      "kind": "forAgent",
+      "text": "Should verify also work when the user is already signed in?",
+      "status": "open",
+      "createdAt": "2026-11-13T09:20:00Z",
+      "reply": { "text": "Yes. It redirects straight to the return page without consuming the token.", "at": "2026-11-13T09:30:00Z" }
+    }
+  ]
+}

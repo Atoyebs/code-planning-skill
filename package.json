@@ -1,0 +1,22 @@
+{
+  "name": "feature-plan-skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Source for the feature-plan Claude skill: plan schema, CLI and dashboard viewer.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && mv plugin/skills/feature-plan/dist/index.html plugin/skills/feature-plan/dist/template.html && esbuild src/cli.ts --bundle --platform=node --format=esm --minify --log-level=warning --outfile=plugin/skills/feature-plan/scripts/plan.mjs && cp src/schema.ts plugin/skills/feature-plan/schema/plan.schema.ts",
+    "test": "npm run build && node --test \"src/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-singlefile": "^2.3.4",
+    "zod": "^4.6.7"
+  }
+}
