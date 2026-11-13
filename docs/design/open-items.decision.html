@@ -22,9 +22,15 @@
 </tr>
 <tr>
 <td>Saving state from a static page</td>
-<td>Every change is kept in the browser (localStorage). "Save for agent" writes <code>plan.state.json</code> directly where the browser allows it (Chrome, Edge) and downloads it otherwise (Firefox, Safari).</td>
-<td>Direct save; download; a tiny local server.</td>
-<td>No server to start or stop, and nothing is lost on reload. Trade-off: after a reload the developer clicks Save once more to reconnect the file, and Firefox and Safari users move the downloaded file by hand.</td>
+<td><strong>Changed 2026-11-13, after the first test run.</strong> The skill serves each plan from a tiny local server (<code>plan.mjs serve</code>). The page saves <code>plan.state.json</code> into the plan folder by itself after every change, and "Save for agent" confirms with a toast showing the path. Opened from disk instead, the earlier behaviour remains: direct save after one file pick (Chrome, Edge) or a download (Firefox, Safari).</td>
+<td>Direct save; download; a tiny local server. First build chose direct save with download as fallback.</td>
+<td>The owner wanted saving to land in the plan folder with no file picker. A page opened from disk cannot choose where it writes, in any browser, so only the server can do this. Trade-off: one background process per open plan. It listens on this machine only and refuses requests from other sites. It stops when it is no longer needed: each open dashboard tab holds a connection to it, and it closes about 15 minutes after the last tab does (long enough for a reload or a reopened tab). The agent also runs <code>plan.mjs stop</code> when the plan is finished. A fixed idle timer (first 12 hours) was replaced because it kept servers alive long after anyone was looking.</td>
+</tr>
+<tr>
+<td>Toast</td>
+<td>A small native toast (corner card, title and detail, close button, auto-dismiss, announced to screen readers).</td>
+<td>Radix UI Toast, which the owner pointed to.</td>
+<td>Radix is a React library and the dashboard is plain TypeScript. Adding React for one toast would enlarge every plan file. The native version copies Radix's behaviour.</td>
 </tr>
 <tr>
 <td>Third file name and scope</td>

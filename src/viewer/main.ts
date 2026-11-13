@@ -2,6 +2,7 @@ import './style.css';
 import type { Note, Plan, PlanState } from '../schema.ts';
 import { toMarkdown } from './markdown.ts';
 import { readSlot, Store } from './store.ts';
+import { escapeHtml } from '../utility/text.ts';
 import { PlanView, SECTIONS, type Ui } from './view.ts';
 
 const THEME_KEY = 'feature-plan:theme';
@@ -36,6 +37,36 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
+let toastTimer = 0;
+// The toast lives outside #app so redraws never wipe it and screen readers
+// hear each message (a polite live region, like Radix's Toast).
+const toastEl = Object.assign(document.createElement('div'), { className: 'toast' });
+toastEl.setAttribute('role', 'status');
+toastEl.setAttribute('aria-live', 'polite');
+toastEl.addEventListener('click', (event) => {
+  if ((event.target as Element).closest('button')) toastEl.classList.remove('show');
+});
+document.body.append(toastEl);
+
+/**
+ * Shows a small confirmation card in the corner for a few seconds.
+ * It stays while the pointer is over it, and has a close button.
+ *
+ * @param title - What happened, in a word or two.
+ * @param detail - One more line, such as where a file was saved.
+ */
+function toast(title: string, detail = ''): void {
+  toastEl.innerHTML = `<div><b>${escapeHtml(title)}</b>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</div><button aria-label="Dismiss">Close</button>`;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  /** Hides the toast unless the pointer is resting on it. */
+  const hide = () => {
+    if (toastEl.matches(':hover')) toastTimer = window.setTimeout(hide, 1000);
+    else toastEl.classList.remove('show');
+  };
+  toastTimer = window.setTimeout(hide, 5000);
+}
+
 /**
  * Starts the dashboard for a plan: draws it, then redraws after every click
  * that changes something.
@@ -45,9 +76,8 @@ async function copyText(text: string): Promise<void> {
  */
 function start(plan: Plan, fileState: PlanState | null): void {
   const store = new Store(plan, fileState);
-  const ui: Ui = { section: sectionFromHash(), diagram: 0, openNote: null, toast: '' };
+  const ui: Ui = { section: sectionFromHash(), diagram: 0, openNote: null };
   const view = new PlanView(store, ui);
-  let toastTimer = 0;
   document.title = `${plan.title} · feature plan`;
 
   /** Redraws the page, keeping keyboard focus on the control that was just used. */
@@ -58,17 +88,6 @@ function start(plan: Plan, fileState: PlanState | null): void {
       : null;
     app.innerHTML = view.html();
     if (selector) app.querySelector<HTMLElement>(selector)?.focus();
-  };
-
-  /** Shows a short status message for a few seconds. */
-  const toast = (message: string) => {
-    ui.toast = message;
-    render();
-    clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => {
-      ui.toast = '';
-      render();
-    }, 6000);
   };
 
   /** Switches to a section and records it in the URL hash. */
@@ -123,13 +142,16 @@ function start(plan: Plan, fileState: PlanState | null): void {
         return render();
       }
       case 'copy':
-        return void copyText(toMarkdown(plan, store.state)).then(() => toast('Plan copied as markdown.'));
+        return void copyText(toMarkdown(plan, store.state)).then(() => toast('Copied', 'The plan is on your clipboard as markdown.'));
       case 'save':
-        return void store.save().then(toast);
+        return void store.save().then(({ title, detail }) => toast(title, detail));
     }
   });
 
   render();
+  // Served by the plan server: hold a connection open so it knows this tab is
+  // still in use, and can stop itself once every tab has closed.
+  if (location.protocol !== 'file:') new EventSource('alive');
 }
 
 try {

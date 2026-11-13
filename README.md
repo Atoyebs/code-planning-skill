@@ -42,16 +42,23 @@ The agent surveys the code, checks fast-changing facts against current docs, wri
 and opens the dashboard. Then:
 
 1. Read it. Pick an option on each decision card. Leave notes where you disagree.
-2. Press **Save for agent**. In Chrome and Edge, choose the plan folder once and later changes
-   save themselves. In Firefox and Safari it downloads `plan.state.json`; move it into the
-   plan folder next to `plan.html`.
+2. Your changes save into the plan folder by themselves, in any browser, because the agent
+   serves the plan from a tiny local server (this machine only). **Save for agent** confirms
+   it with a toast showing where the file went.
 3. Tell the agent you are done. It rewrites only what your choices affect, answers your
    notes, and marks the plan final.
+
+The server stops by itself about 15 minutes after you close the last dashboard tab, and the
+agent stops it when the plan is finished. To stop one yourself:
+`node plugin/skills/feature-plan/scripts/plan.mjs stop <plan-folder>`.
+
+`plan.html` also opens straight from disk, with no server. Saving then takes one file pick in
+Chrome and Edge, or a download you move into the plan folder in Firefox and Safari.
 
 To see a finished example without running the agent:
 
 ```bash
-mkdir -p /tmp/demo-plan && cp plugin/skills/feature-plan/examples/magic-link-signin.plan.json /tmp/demo-plan/plan.json && node plugin/skills/feature-plan/scripts/plan.mjs stamp /tmp/demo-plan --open
+mkdir -p /tmp/demo-plan && cp plugin/skills/feature-plan/examples/magic-link-signin.plan.json /tmp/demo-plan/plan.json && node plugin/skills/feature-plan/scripts/plan.mjs serve /tmp/demo-plan --open
 ```
 
 ## How it works
@@ -84,9 +91,13 @@ npm test
 | Path | What it is |
 |---|---|
 | `src/schema.ts` | The plan's shape and word budgets (Zod). Single source of truth |
-| `src/cli.ts` | The `dir`, `validate` and `stamp` commands |
+| `src/cli.ts` | The `dir`, `validate`, `stamp`, `serve` and `stop` commands |
 | `src/viewer/` | The dashboard (TypeScript, no framework), built by Vite into one HTML file |
 | `plugin/skills/feature-plan/` | The installable skill. `dist/`, `scripts/` and `schema/` are build output, committed so users need no build |
 | `docs/` | Design decisions |
 
 `npm run build` regenerates the build output. Commit it together with source changes.
+
+## License
+
+[MIT](LICENSE)

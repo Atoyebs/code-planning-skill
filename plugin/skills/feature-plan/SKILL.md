@@ -24,7 +24,7 @@ The skill folder (`${CLAUDE_SKILL_DIR}`, the folder holding this file) contains:
 
 | File | Use |
 |---|---|
-| `scripts/plan.mjs` | `dir`, `validate` and `stamp` commands. Needs only Node 18+ |
+| `scripts/plan.mjs` | `dir`, `validate`, `stamp`, `serve` and `stop` commands. Needs only Node 18+ |
 | `schema/plan.schema.ts` | The exact shape and word budget of every field. **Read it before writing `plan.json`** |
 | `examples/magic-link-signin.plan.json` | A complete valid plan to copy the shape from |
 | `agents/scout.md`, `researcher.md`, `reviewer.md` | Briefs for sub-agents |
@@ -75,15 +75,20 @@ one-line Approach and Risks sections.
 8. **Independent review.** Run `validate` and fix every problem. Then give a fresh sub-agent
    the brief in `agents/reviewer.md` plus only the path to `plan.json` and the repo. Do not
    pass your reasoning; it must start cold. Fix what it finds.
-9. **Render.** Stamp, open, and tell the developer the path:
+9. **Render.** Serve the plan and open it. Run this **in the background**: it keeps running
+   so the dashboard can save the developer's picks and notes straight into the plan folder.
 
    ```bash
-   node ${CLAUDE_SKILL_DIR}/scripts/plan.mjs stamp <plan-dir> --open
+   node ${CLAUDE_SKILL_DIR}/scripts/plan.mjs serve <plan-dir> --open
    ```
 
+   It prints the dashboard's address, also writes an offline `plan.html`, and is safe to run
+   again for the same plan. It stops by itself about 15 minutes after the developer closes
+   the last dashboard tab, so running `serve` again is also how you bring a plan back. If you cannot keep a process
+   running, use `stamp <plan-dir> --open` instead; the developer then saves by hand.
+
    Then say, in two or three lines: which decisions need them, and that after picking options
-   and leaving notes they should press **Save for agent** in the dashboard (saving
-   `plan.state.json` into the plan folder) and tell you they are done.
+   and leaving notes they should tell you they are done. Their changes save automatically.
 
 No sub-agents available? Do stages 3, 5 and 8 yourself, in order, following the same briefs.
 
@@ -128,9 +133,10 @@ Two source formats, both drawn by the dashboard:
 
 They will say something like "done", "I've picked" or "I left comments".
 
-1. Read `<plan-dir>/plan.state.json`. If it is missing or older than they imply, ask them to
-   press **Save for agent** in the dashboard (in Firefox and Safari it downloads the file, which
-   they then move into the plan folder).
+1. Read `<plan-dir>/plan.state.json`. If it is missing or older than they imply, the page was
+   probably opened from disk rather than from the plan server: ask them to press
+   **Save for agent** (in Firefox and Safari it downloads the file, which they then move into
+   the plan folder), or run `serve` again.
 2. **Decisions.** For each decision compare their pick in `state.decisions` with the option
    the plan is written for (`chosen`, or `recommended` when `chosen` is absent).
    - Same: nothing to rewrite.
@@ -144,6 +150,16 @@ They will say something like "done", "I've picked" or "I left comments".
    `updatedAt`, which you must set to the current ISO time so the dashboard picks up your edit.
 4. If you rewrote items, have the reviewer re-check just those ids.
 5. When every decision is picked and no `forAgent` note is open, set `status: "final"`.
-   Bump the plan's `updatedAt`, then validate and stamp again with `--open`.
+   Bump the plan's `updatedAt`, then run `validate`, then `serve <plan-dir> --open` again.
+   A served page shows your edits on reload, so tell the developer to reload if it is open.
 
-Re-running `stamp` on any plan folder also upgrades an old plan to the current dashboard.
+**Stop the server when the work is over**: once the plan is final and the developer has seen
+it, or whenever they say they are done with the plan, run:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/scripts/plan.mjs stop <plan-dir>
+```
+
+Their ticks are already saved, and `plan.html` in the plan folder still opens from disk.
+
+Re-running `stamp` or `serve` on any plan folder also upgrades an old plan to the current dashboard.

@@ -19,9 +19,11 @@ export function readSlot<T>(slotId: string): T | null {
  * picks, notes) and keeps it safe.
  *
  * Every change is copied to the browser's localStorage so a reload loses
- * nothing. The agent cannot read localStorage, so "Save" also writes
- * plan.state.json: straight to disk where the browser allows it (Chrome,
- * Edge), otherwise as a download to drop into the plan folder.
+ * nothing. The agent cannot read localStorage, so the state also has to
+ * reach plan.state.json. Three ways, best first:
+ *   1. the plan server (`plan.mjs serve`) writes it into the plan folder, automatically;
+ *   2. opened from disk in Chrome or Edge: Save writes it after one file pick;
+ *   3. otherwise Save downloads it, to drop into the plan folder.
  *
  * Pattern: Observer. The view registers one `onChange` listener and redraws
  * whenever the state changes.
@@ -36,6 +38,8 @@ export class Store {
 
   private readonly storageKey: string;
   private fileHandle: FileSystemFileHandle | null = null;
+  /** True once the plan server has accepted a save. */
+  private served = false;
 
   /**
    * @param plan - The plan being shown.
@@ -85,7 +89,38 @@ export class Store {
       // Storage can be blocked (private windows). The Save button still works.
     }
     if (this.fileHandle) void this.writeFile();
+    else void this.putToServer();
     this.onChange();
+  }
+
+  /**
+   * Sends the state to the plan server, which writes plan.state.json into
+   * the plan folder. Does nothing when the page was opened from disk.
+   *
+   * @returns The path of the file that was written, or null when there is no plan server.
+   */
+  private async putToServer(): Promise<string | null> {
+    if (location.protocol === 'file:') return null;
+    const sent = this.state.updatedAt;
+    try {
+      // shortcut: quick clicks send overlapping saves and rely on localhost keeping
+      // their order; queue them if a stale save ever lands last.
+      const reply = await fetch('state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.state),
+      });
+      if (!reply.ok) return null;
+      const { path } = (await reply.json()) as { path: string };
+      this.served = true;
+      if (this.state.updatedAt === sent) {
+        this.dirty = false;
+        this.onChange();
+      }
+      return path;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -100,9 +135,9 @@ export class Store {
     this.onChange();
   }
 
-  /** True once Save has connected a file, so later changes save themselves. */
+  /** True once a save route is connected, so later changes save themselves. */
   get autosaving(): boolean {
-    return this.fileHandle !== null;
+    return this.fileHandle !== null || this.served;
   }
 
   /**
@@ -162,9 +197,11 @@ export class Store {
   /**
    * Saves the state where the agent can read it.
    *
-   * @returns A short message telling the developer what happened.
+   * @returns A title and a detail line telling the developer what happened.
    */
-  async save(): Promise<string> {
+  async save(): Promise<{ title: string; detail: string }> {
+    const savedTo = await this.putToServer();
+    if (savedTo) return { title: 'Saved', detail: savedTo };
     const picker = (window as unknown as { showSaveFilePicker?: (options: object) => Promise<FileSystemFileHandle> })
       .showSaveFilePicker;
     if (picker) {
@@ -176,9 +213,9 @@ export class Store {
           types: [{ description: 'Plan state', accept: { 'application/json': ['.json'] } }],
         });
         await this.writeFile();
-        return 'Saved. Further changes save automatically until you reload.';
+        return { title: 'Saved', detail: 'Further changes save automatically until you reload.' };
       } catch (error) {
-        if ((error as Error).name === 'AbortError') return 'Save cancelled.';
+        if ((error as Error).name === 'AbortError') return { title: 'Not saved', detail: 'You cancelled the file picker.' };
         this.fileHandle = null; // fall through to a download
       }
     }
@@ -189,6 +226,6 @@ export class Store {
     URL.revokeObjectURL(link.href);
     this.dirty = false;
     this.onChange();
-    return 'Downloaded plan.state.json. Move it into the plan folder, next to plan.html.';
+    return { title: 'Downloaded plan.state.json', detail: 'Move it into the plan folder, next to plan.html.' };
   }
 }

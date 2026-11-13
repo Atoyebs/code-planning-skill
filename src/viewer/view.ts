@@ -54,8 +54,6 @@ export interface Ui {
   diagram: number;
   /** Id of the item whose notes are expanded, if any. */
   openNote: string | null;
-  /** Short status message, such as "Copied". */
-  toast: string;
 }
 
 /**
@@ -281,8 +279,7 @@ ${stat('done', `${this.doneCount(plan.goal.doneWhen)}/${plan.goal.doneWhen.lengt
 <button class="pill" data-act="save" title="${saveHint}">${icon('save')}<span>${autosaving && !dirty ? 'Autosaving' : 'Save for agent'}</span>${dirty ? '<span class="dot" role="img" aria-label="unsaved changes"></span>' : ''}</button>
 <button class="sq" data-act="copy" aria-label="Copy plan as markdown" title="Copy plan as markdown">${icon('copy', 20)}</button>
 <button class="sq" data-act="theme" aria-label="Switch to ${dark ? 'light' : 'dark'} mode" title="Switch to ${dark ? 'light' : 'dark'} mode">${icon(dark ? 'sun' : 'moon', 20)}</button>
-</div></header>
-<div class="toast mono" role="status">${h(this.ui.toast)}</div>`;
+</div></header>`;
   }
 
   /**

@@ -59,3 +59,57 @@ test('unknown commands print usage', () => {
   assert.equal(code, 2);
   assert.match(out, /usage:/);
 });
+
+test('serve shows the plan and saves state into the plan folder, for its own page only', async () => {
+  const { spawn } = await import('node:child_process');
+  const dir = tempPlan();
+  const child = spawn('node', [`${SKILL}/scripts/plan.mjs`, 'serve', dir]);
+  try {
+    const url: string = await new Promise((resolve, reject) => {
+      child.stdout.once('data', (line) => resolve(String(line).trim()));
+      child.stderr.once('data', (line) => reject(new Error(String(line))));
+    });
+    assert.match(await (await fetch(url)).text(), /"title":"Magic-link sign-in"/);
+
+    const state = readFileSync(`${SKILL}/examples/magic-link-signin.state.json`, 'utf8');
+    /** Sends a save the way the dashboard does, optionally pretending to be another site. */
+    const put = (body: string, origin?: string) =>
+      fetch(`${url}state`, { method: 'PUT', body, headers: origin ? { Origin: origin } : {} });
+
+    const saved = await put(state);
+    assert.equal(saved.status, 200);
+    const { path } = (await saved.json()) as { path: string };
+    assert.ok(path.endsWith('plan.state.json'));
+    assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), JSON.parse(state));
+
+    assert.equal((await put('{"not":"a state"}')).status, 400);
+    assert.equal((await put(state, 'https://evil.example')).status, 403);
+
+    // A second serve reuses the running server, and stop closes it.
+    assert.equal(run('serve', dir).out.trim(), url);
+    assert.match(run('stop', dir).out, /^stopped http/);
+    await new Promise((resolve) => child.once('exit', resolve));
+    assert.match(run('stop', dir).out, /no server is running/);
+  } finally {
+    child.kill();
+  }
+});
+
+test('the server stays up while a dashboard tab is open and stops soon after the last one closes', async () => {
+  const { spawn } = await import('node:child_process');
+  const child = spawn('node', [`${SKILL}/scripts/plan.mjs`, 'serve', tempPlan()], {
+    env: { ...process.env, FEATURE_PLAN_GRACE_MS: '300' },
+  });
+  try {
+    const url: string = await new Promise((resolve) => child.stdout.once('data', (line) => resolve(String(line).trim())));
+    const tab = new AbortController();
+    await fetch(`${url}alive`, { signal: tab.signal }); // an open tab
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    assert.equal(child.exitCode, null, 'stopped while a tab was still open');
+    tab.abort(); // the tab closes
+    await new Promise((resolve) => child.once('exit', resolve));
+    assert.equal(child.exitCode, 0);
+  } finally {
+    child.kill();
+  }
+});
